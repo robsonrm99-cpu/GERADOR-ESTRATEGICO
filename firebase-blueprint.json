@@ -1,0 +1,95 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "name", "role", "createdAt"]
+    },
+    "Proposal": {
+      "title": "Proposal",
+      "description": "A generated credit proposal",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "clientName": { "type": "string" },
+        "creditType": { "type": "string" },
+        "creditCategory": { "type": "string" },
+        "requestedValue": { "type": "number" },
+        "consultantName": { "type": "string" },
+        "emissionDate": { "type": "string", "format": "date-time" },
+        "adhesionValue": { "type": "number" },
+        "adminFeePercentage": { "type": "number" },
+        "isManualFinancing": { "type": "boolean" },
+        "manualFinancingEntry": { "type": "number" },
+        "manualFinancingInstallment": { "type": "number" },
+        "manualFinancingTotal": { "type": "number" },
+        "financingFactor": { "type": "number" },
+        "financingTerm": { "type": "number" },
+        "letterTerm": { "type": "number" },
+        "letterInstallment": { "type": "number" },
+        "observations": { "type": "string" },
+        "validity": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "templateStyle": { "type": "string", "enum": ["estudo", "simulador"] },
+        "clientCpf": { "type": "string" },
+        "proposalCode": { "type": "string" },
+        "consultantPhone": { "type": "string" },
+        "urgencyBannerText": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "clientName", "requestedValue", "createdAt"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Global calculation settings",
+      "type": "object",
+      "properties": {
+        "financingFactors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "max": { "type": "number" },
+              "factor": { "type": "number" }
+            }
+          }
+        },
+        "financingTerms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "max": { "type": "number" },
+              "term": { "type": "number" }
+            }
+          }
+        },
+        "defaultAdhesion": { "type": "number" },
+        "defaultLetterTerm": { "type": "number" },
+        "defaultLetterInstallmentFactor": { "type": "number" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profiles"
+    },
+    "/proposals/{proposalId}": {
+      "schema": { "$ref": "#/entities/Proposal" },
+      "description": "Saved proposals"
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/Settings" },
+      "description": "Global settings"
+    }
+  }
+}
