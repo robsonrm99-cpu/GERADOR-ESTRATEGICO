@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { collection, query, where, getDocs, orderBy, deleteDoc, doc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import { ProposalData, formatCurrency } from '../lib/calculations';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
@@ -23,14 +21,18 @@ export default function Dashboard() {
   const fetchProposals = async () => {
     if (!user) return;
     try {
-      const q = query(
-        collection(db, 'proposals'),
-        where('uid', '==', user.uid),
-        orderBy('createdAt', 'desc')
-      );
-      const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ProposalData));
-      setProposals(data);
+      const proposalsRaw = localStorage.getItem('valoriza_proposals');
+      const allProposals: ProposalData[] = proposalsRaw ? JSON.parse(proposalsRaw) : [];
+      
+      const userProposals = allProposals
+        .filter(p => p.uid === user.uid)
+        .sort((a, b) => {
+          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return dateB - dateA;
+        });
+
+      setProposals(userProposals);
     } catch (error) {
       console.error("Error fetching proposals:", error);
     } finally {
@@ -41,7 +43,10 @@ export default function Dashboard() {
   const handleDelete = async (id: string) => {
     if (window.confirm('Tem certeza que deseja excluir esta proposta?')) {
       try {
-        await deleteDoc(doc(db, 'proposals', id));
+        const proposalsRaw = localStorage.getItem('valoriza_proposals');
+        const allProposals: ProposalData[] = proposalsRaw ? JSON.parse(proposalsRaw) : [];
+        const updated = allProposals.filter(p => p.id !== id);
+        localStorage.setItem('valoriza_proposals', JSON.stringify(updated));
         setProposals(proposals.filter(p => p.id !== id));
       } catch (error) {
         console.error("Error deleting proposal:", error);

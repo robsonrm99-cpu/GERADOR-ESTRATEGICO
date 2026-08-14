@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import { ProposalData, calculateProposal, formatCurrency } from '../lib/calculations';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -61,17 +59,35 @@ export default function ProposalEditor() {
     } else if (location.state?.duplicateFrom) {
       const { id: _, createdAt: __, ...rest } = location.state.duplicateFrom;
       setFormData({ ...rest, emissionDate: new Date().toISOString().split('T')[0] });
+    } else {
+      // Load local settings for default values when creating a new proposal
+      try {
+        const savedSettings = localStorage.getItem('valoriza_settings_global');
+        if (savedSettings) {
+          const parsed = JSON.parse(savedSettings);
+          const defaultAdhesionPct = typeof parsed.defaultAdhesion === 'number' ? parsed.defaultAdhesion : 2;
+          const defaultTerm = typeof parsed.defaultLetterTerm === 'number' ? parsed.defaultLetterTerm : 180;
+          setFormData(prev => ({
+            ...prev,
+            adhesionValue: (prev.requestedValue || 200000) * defaultAdhesionPct / 100,
+            letterTerm: defaultTerm,
+          }));
+        }
+      } catch (e) {
+        console.error("Error loading default settings:", e);
+      }
     }
-  }, [id]);
+  }, [id, location.state]);
 
   const loadProposal = async (proposalId: string) => {
     try {
-      const docRef = doc(db, 'proposals', proposalId);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists() && docSnap.data().uid === user?.uid) {
+      const proposalsRaw = localStorage.getItem('valoriza_proposals');
+      const allProposals: ProposalData[] = proposalsRaw ? JSON.parse(proposalsRaw) : [];
+      const found = allProposals.find(p => p.id === proposalId);
+      if (found && found.uid === user?.uid) {
         setFormData(prev => ({
           ...prev,
-          ...docSnap.data()
+          ...found
         }) as ProposalData);
       } else {
         navigate('/dashboard');
@@ -93,20 +109,32 @@ export default function ProposalEditor() {
     if (!user) return;
     setSaving(true);
     try {
+      const proposalsRaw = localStorage.getItem('valoriza_proposals');
+      const allProposals: ProposalData[] = proposalsRaw ? JSON.parse(proposalsRaw) : [];
+
       const proposalData = {
         ...formData,
         uid: user.uid,
         updatedAt: new Date().toISOString(),
-      };
+      } as ProposalData;
 
       if (id) {
-        await updateDoc(doc(db, 'proposals', id), proposalData);
+        const updated = allProposals.map(p => {
+          if (p.id === id) {
+            return { ...p, ...proposalData };
+          }
+          return p;
+        });
+        localStorage.setItem('valoriza_proposals', JSON.stringify(updated));
       } else {
         const newId = Date.now().toString();
-        await setDoc(doc(db, 'proposals', newId), {
+        const newProposal: ProposalData = {
           ...proposalData,
+          id: newId,
           createdAt: new Date().toISOString(),
-        });
+        };
+        allProposals.push(newProposal);
+        localStorage.setItem('valoriza_proposals', JSON.stringify(allProposals));
         navigate(`/proposal/edit/${newId}`, { replace: true });
       }
       alert('Proposta salva com sucesso!');

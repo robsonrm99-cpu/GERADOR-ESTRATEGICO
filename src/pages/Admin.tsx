@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -24,10 +22,9 @@ export default function Admin() {
 
   const loadSettings = async () => {
     try {
-      const docRef = doc(db, 'settings', 'global');
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        setSettings(docSnap.data() as any);
+      const savedSettings = localStorage.getItem('valoriza_settings_global');
+      if (savedSettings) {
+        setSettings(JSON.parse(savedSettings));
       }
     } catch (error) {
       console.error("Error loading settings:", error);
@@ -45,7 +42,7 @@ export default function Admin() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await setDoc(doc(db, 'settings', 'global'), settings);
+      localStorage.setItem('valoriza_settings_global', JSON.stringify(settings));
       alert('Configurações salvas com sucesso!');
     } catch (error) {
       console.error("Error saving settings:", error);
