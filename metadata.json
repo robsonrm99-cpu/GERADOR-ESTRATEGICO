@@ -1,5 +1,8 @@
 {
   "name": "Gerador Estratégico",
-  "description": "",
-  "requestFramePermissions": []
+  "description": "Gerador de propostas de crédito estratégico e comparativo consorcial.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
