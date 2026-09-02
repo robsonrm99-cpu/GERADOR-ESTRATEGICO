@@ -7,8 +7,10 @@ import { Input } from '../components/ui/input';
 import { CurrencyInput } from '../components/ui/currency-input';
 import { Label } from '../components/ui/label';
 import { Card } from '../components/ui/card';
-import { ArrowLeft, Save, Download, FileText, Building2, Car, Home, TrendingUp, TrendingDown, Clock, AlertCircle, CheckCircle, PiggyBank, Target, Zap, ShieldCheck, Landmark, AlertTriangle, Eye } from 'lucide-react';
+import { ArrowLeft, Save, Download, FileText, Building2, Car, Home, TrendingUp, TrendingDown, Clock, AlertCircle, CheckCircle, PiggyBank, Target, Zap, ShieldCheck, Landmark, AlertTriangle, Eye, Printer } from 'lucide-react';
 import { format } from 'date-fns';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 const CATEGORIES = [
   { id: 'imovel', label: 'Imóvel', icon: Home },
@@ -171,60 +173,107 @@ export default function ProposalEditor() {
     setGeneratingPdf(true);
     
     try {
-      // Get the HTML content of the preview
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="UTF-8">
-          <title>Proposta</title>
-          <script src="https://cdn.tailwindcss.com"></script>
-          <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
-          <style>
-            @page {
-              size: A4;
-              margin: 0 !important;
-            }
-            body { 
-              font-family: 'Inter', sans-serif; 
-              -webkit-print-color-adjust: exact; 
-              print-color-adjust: exact; 
-              margin: 0 !important;
-              padding: 0 !important;
-              background-color: #ffffff;
-            }
-            .premium-gradient { background: linear-gradient(135deg, #18181b 0%, #27272a 100%); }
-            .gold-text { color: #fbbf24; }
-          </style>
-        </head>
-        <body class="bg-white">
-          <div style="width: 794px; height: 1123px; position: relative; overflow: hidden; box-sizing: border-box;">
-            ${previewRef.current.innerHTML}
-          </div>
-        </body>
-        </html>
-      `;
+      const element = previewRef.current;
 
-      const response = await fetch('/api/generate-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ html: htmlContent })
+      // Wait for fonts to be loaded
+      if (document.fonts) {
+        await document.fonts.ready;
+      }
+
+      // Ensure any images are fully loaded
+      const images = Array.from(element.querySelectorAll('img')) as HTMLImageElement[];
+      await Promise.all(
+        images.map(img => {
+          if (img.complete) return Promise.resolve();
+          return new Promise(resolve => {
+            img.onload = resolve;
+            img.onerror = resolve;
+          });
+        })
+      );
+
+      // Render the DOM node to a high-resolution canvas
+      const canvas = await html2canvas(element, {
+        scale: 2, // 2x scale for sharp text and crisp lines (1588 x 2246 px)
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        scrollX: 0,
+        scrollY: 0,
       });
 
-      if (!response.ok) throw new Error('Failed to generate PDF');
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+        compress: true,
+      });
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Proposta_${formData.clientName?.replace(/\s+/g, '_') || 'Credito'}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error("Error generating PDF:", error);
-      alert('Erro ao gerar PDF. Verifique se o servidor está rodando.');
+      // A4 format: 210 x 297 mm
+      pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+
+      const rawName = formData.clientName || 'Credito';
+      const safeName = rawName.trim().replace(/[^a-zA-Z0-9À-ÿ_-]/g, '_');
+      pdf.save(`Proposta_${safeName}.pdf`);
+    } catch (clientError) {
+      console.warn("Client-side PDF render encountered an issue, trying alternative method...", clientError);
+      
+      // Fallback: If backend server is running (e.g., local dev or container environment)
+      let serverSuccess = false;
+      try {
+        const htmlContent = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <title>Proposta</title>
+            <script src="https://cdn.tailwindcss.com"></script>
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+            <style>
+              @page { size: A4; margin: 0 !important; }
+              body { font-family: 'Inter', sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; margin: 0 !important; padding: 0 !important; background-color: #ffffff; }
+              .premium-gradient { background: linear-gradient(135deg, #18181b 0%, #27272a 100%); }
+              .gold-text { color: #fbbf24; }
+            </style>
+          </head>
+          <body class="bg-white">
+            <div style="width: 794px; height: 1123px; position: relative; overflow: hidden; box-sizing: border-box;">
+              ${previewRef.current.innerHTML}
+            </div>
+          </body>
+          </html>
+        `;
+
+        const response = await fetch('/api/generate-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ html: htmlContent })
+        });
+
+        if (response.ok) {
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          const safeName = (formData.clientName || 'Credito').trim().replace(/[^a-zA-Z0-9À-ÿ_-]/g, '_');
+          a.download = `Proposta_${safeName}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+          serverSuccess = true;
+        }
+      } catch (serverError) {
+        console.warn("Server generation also unavailable:", serverError);
+      }
+
+      if (!serverSuccess) {
+        // Last-resort fallback: browser native print to PDF
+        window.print();
+      }
     } finally {
       setGeneratingPdf(false);
     }
@@ -248,7 +297,7 @@ export default function ProposalEditor() {
 
   return (
     <div className="min-h-screen bg-zinc-50 flex flex-col">
-      <header className="bg-white border-b border-zinc-200 sticky top-0 z-20">
+      <header className="no-print bg-white border-b border-zinc-200 sticky top-0 z-20">
         <div className="max-w-[1600px] mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')}>
@@ -263,6 +312,10 @@ export default function ProposalEditor() {
               <Save className="w-4 h-4 mr-2" />
               {saving ? 'Salvando...' : 'Salvar'}
             </Button>
+            <Button variant="outline" onClick={() => window.print()} title="Imprimir ou Salvar via Navegador">
+              <Printer className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Imprimir</span>
+            </Button>
             <Button variant="premium" onClick={handleDownloadPdf} disabled={generatingPdf}>
               <Download className="w-4 h-4 mr-2" />
               {generatingPdf ? 'Gerando...' : 'Baixar PDF'}
@@ -271,9 +324,9 @@ export default function ProposalEditor() {
         </div>
       </header>
 
-      <main className="flex-1 max-w-[1600px] w-full mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <main className="flex-1 max-w-[1600px] w-full mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start print:p-0 print:m-0 print:block">
         {/* Formulário */}
-        <div className="lg:col-span-4 space-y-6 lg:sticky lg:top-24 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2 pb-10">
+        <div className="no-print lg:col-span-4 space-y-6 lg:sticky lg:top-24 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2 pb-10">
           <Card>
             <div className="p-4 border-b border-zinc-100 bg-zinc-50/50 rounded-t-xl select-none">
               <h2 className="font-semibold text-zinc-900 text-sm uppercase tracking-wider">Modelo do Estudo / PDF</h2>
@@ -509,14 +562,14 @@ export default function ProposalEditor() {
         </div>
 
         {/* Live Preview */}
-        <div className="lg:col-span-8 bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden min-h-[800px]">
-          <div className="bg-zinc-100 p-2 border-b border-zinc-200 flex justify-center text-xs text-zinc-500 font-medium uppercase tracking-wider">
+        <div className="lg:col-span-8 bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden min-h-[800px] print:border-none print:shadow-none print:rounded-none print:min-h-0 print:p-0 print:m-0">
+          <div className="no-print bg-zinc-100 p-2 border-b border-zinc-200 flex justify-center text-xs text-zinc-500 font-medium uppercase tracking-wider">
             Preview do Documento (A4)
           </div>
-          <div className="p-8 sm:p-12 overflow-x-auto">
+          <div className="p-8 sm:p-12 overflow-x-auto print:p-0 print:overflow-visible">
             <div 
               ref={previewRef} 
-              className="w-[794px] min-h-[1123px] mx-auto bg-white shadow-2xl border border-zinc-100 relative"
+              className="w-[794px] min-h-[1123px] mx-auto bg-white shadow-2xl border border-zinc-100 relative print:shadow-none print:border-none print:m-0"
               style={{ transformOrigin: 'top center', transform: 'scale(1)' }}
             >
               {/* PDF Content Starts Here */}
@@ -544,6 +597,7 @@ export default function ProposalEditor() {
                       src="https://res.cloudinary.com/dsevqnhts/image/upload/v1781112929/image.png_202606101433_ald31t.jpg" 
                       alt="Planilha de Simulação" 
                       className="w-full h-full object-cover"
+                      crossOrigin="anonymous"
                       referrerPolicy="no-referrer"
                     />
                   </div>
